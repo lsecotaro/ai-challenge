@@ -1,8 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {Inject, Injectable} from '@nestjs/common';
+import {IAActions} from "../interfaces/IaActions";
 
 @Injectable()
 export class VehicleServiceHistoryService {
-  add(): string {
-    return 'History added!';
+  constructor(@Inject('IaActions') private readonly aIService: IAActions) {
+  }
+
+  add(): Promise<string> {
+    return this.aIService.test("Name: John,, Age: 29, Email: john.doe@example.com");
   }
 }
