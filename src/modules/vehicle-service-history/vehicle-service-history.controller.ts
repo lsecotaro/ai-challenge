@@ -6,7 +6,7 @@ export class VehicleServiceHistoryController {
   constructor(private readonly vehicleServiceHistoryService: VehicleServiceHistoryService) {}
 
   @Post("history")
-  getPing(): string {
-    return this.vehicleServiceHistoryService.add();
+  async addHistory(): Promise<string> {
+    return await this.vehicleServiceHistoryService.add();
   }
 }
