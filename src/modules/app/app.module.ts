@@ -2,14 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import {VehicleServiceHistoryModule} from "./modules/vehicle-service-history/vehicle-service-history.module";
+import { VehicleServiceModule } from '../vehicle-service/vehicle-service.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-        isGlobal: true,
+      isGlobal: true,
     }),
-    VehicleServiceHistoryModule
+    VehicleServiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
