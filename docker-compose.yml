@@ -1,0 +1,16 @@
+version: '3.1'
+
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  db:
+    image: postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    env_file:
+      - docker.env
+    networks:
+      - app-network
