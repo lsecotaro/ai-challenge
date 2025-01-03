@@ -4,10 +4,10 @@ import { OpenAIService } from './open-ai.service';
 @Module({
   providers: [
     {
-      provide: 'IaActions',
+      provide: 'AiActions',
       useClass: OpenAIService,
     },
   ],
-  exports: ['IaActions'],
+  exports: ['AiActions'],
 })
 export class OpenAIModule {}

@@ -7,6 +7,12 @@ Using AI to clean and enrich data
 ```bash
 $ yarn install
 ```
+## DB setup
+
+```bash
+$ docker-compose up --build
+$ npx prisma migrate dev --name "init"
+```
 
 ## Compile and run the project
 

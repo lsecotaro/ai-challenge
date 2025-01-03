@@ -6,6 +6,9 @@ export class EnrichedVehicleDto {
   @IsString()
   model: string;
 
+  @IsString()
+  plate: string;
+
   @IsBoolean()
   isValidVehicle: boolean;
 }

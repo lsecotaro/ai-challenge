@@ -1,4 +1,4 @@
-import { VehicleServiceType } from '../../../commons/service-type.enum';
+import { VehicleServiceType } from '../../../commons/model/service-type.enum';
 import { IsEnum, IsString } from 'class-validator';
 
 export class EnrichedServiceDto {

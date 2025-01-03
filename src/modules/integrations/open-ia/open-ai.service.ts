@@ -1,17 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { OpenAI } from 'openai';
 import { OpenAIMessageDto } from './dto/OpenAIMessageDto';
-import { IAActions } from '../../interfaces/IaActions';
+import { AiActions } from '../../interfaces/ai.actions';
 import * as process from 'process';
-import { VehicleServiceType } from '../../commons/service-type.enum';
+import { VehicleServiceType } from '../../commons/model/service-type.enum';
 
 @Injectable()
-export class OpenAIService implements IAActions {
+export class OpenAIService implements AiActions {
   private readonly SYSTEM = 'system';
   private readonly USER = 'user';
 
   private openai: OpenAI;
   private openaiModel: string;
+  private openaiCertain: number;
   private systemPrompt: string;
   private userPrompt: string;
 
@@ -20,6 +21,7 @@ export class OpenAIService implements IAActions {
       apiKey: process.env.OPENAI_API_KEY,
     });
     this.openaiModel = process.env.OPENAI_MODEL;
+    this.openaiCertain = Number(process.env.OPENAI_CERTAIN);
     this.systemPrompt = process.env.PROMPT_SYSTEM_CLEAN_ENRICH;
     this.userPrompt = process.env.PROMPT_USER_CLEAN;
   }
@@ -28,7 +30,7 @@ export class OpenAIService implements IAActions {
     const messages = this.buildPrompts(data);
     const response = await this.openai.chat.completions.create({
       model: this.openaiModel,
-      temperature: 0.2,
+      temperature: this.openaiCertain,
       messages,
     });
     return response.choices[0]?.message?.content || '';
