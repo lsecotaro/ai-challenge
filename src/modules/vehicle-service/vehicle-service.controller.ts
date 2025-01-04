@@ -7,7 +7,7 @@ import { EnrichedVehicleServiceDto } from './dto/enriched/enriched-vehicle-servi
 export class VehicleServiceController {
   constructor(private readonly vehicleService: VehicleService) {}
 
-  @Post("clean")
+  @Post('clean')
   async cleanNews(
     @Body() request: Array<VehicleServiceRequestDto>,
   ): Promise<Array<EnrichedVehicleServiceDto> | void> {

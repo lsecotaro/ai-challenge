@@ -2,6 +2,10 @@
 
 Using AI to clean and enrich data
 
+## Environment variables
+
+Make a copy of .env.example, rename to .env and set the values
+
 ## Project setup
 
 ```bash
