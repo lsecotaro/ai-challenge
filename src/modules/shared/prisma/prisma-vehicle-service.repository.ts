@@ -1,8 +1,8 @@
 import { PrismaService } from './prisma.service';
 import { EnrichedVehicleServiceDto } from '../../vehicle-service/dto/enriched/enriched-vehicle-service.dto';
 import { Injectable } from '@nestjs/common';
-import { VehicleServiceRepository } from '../../interfaces/prisma-vehicle-service-repository.interface';
-import {ServiceTypeHelper} from "../../commons/service-type.helper";
+import { VehicleServiceRepository } from '../../interfaces/vehicle-service.repository';
+import { ServiceTypeHelper } from '../../commons/service-type.helper';
 
 @Injectable()
 export class PrismaVehicleServiceRepository
@@ -30,16 +30,8 @@ export class PrismaVehicleServiceRepository
   }
 
   async createAllEntities(dto: EnrichedVehicleServiceDto) {
-    const {
-      name,
-      alias,
-      phone,
-      vehicle,
-      plate,
-      service,
-      date,
-      isCompany,
-    } = dto;
+    const { name, alias, phone, vehicle, plate, service, date, isCompany } =
+      dto;
     const serviceEnum = ServiceTypeHelper.getEnumConstant(service.enum);
 
     const customer = await this.prismaService.customer.create({
