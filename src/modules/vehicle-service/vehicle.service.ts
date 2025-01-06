@@ -3,8 +3,10 @@ import { AiActions } from '../interfaces/ai.actions';
 import { VehicleServiceRequestDto } from './dto/vehicle-service-request.dto';
 import { EnrichedVehicleServiceDto } from './dto/enriched/enriched-vehicle-service.dto';
 import { plainToInstance } from 'class-transformer';
-import { VehicleServiceRepository } from '../interfaces/prisma-vehicle-service-repository.interface';
+import { VehicleServiceRepository } from '../interfaces/vehicle-service.repository';
 import { ServiceTypeHelper } from '../commons/service-type.helper';
+import { EnrichedReminderDto } from './dto/enriched/enriched-reminder.dto';
+import { ReminderRepository } from '../interfaces/reminder.repository';
 
 @Injectable()
 export class VehicleService {
@@ -14,21 +16,34 @@ export class VehicleService {
     @Inject('AiActions') private readonly aIService: AiActions,
     @Inject('VehicleServiceRepository')
     private readonly vehicleServiceRepository: VehicleServiceRepository,
+    @Inject('ReminderRepository')
+    private readonly reminderRepository: ReminderRepository,
   ) {}
 
   async processNews(
     services: Array<VehicleServiceRequestDto>,
   ): Promise<Array<EnrichedVehicleServiceDto> | void> {
     this.logger.log('Processing news...');
-    const enrichedNews: Array<EnrichedVehicleServiceDto> = await this.cleanData(services);
 
-    if (enrichedNews && Array.isArray(enrichedNews)) {
-      for (const enrichedNewsItem of enrichedNews) {
+    this.logger.log('Cleaning news data...');
+    const enrichedNews: Array<EnrichedVehicleServiceDto> =
+      await this.cleanData(services);
+
+    this.logger.log('Enriching news data...');
+    const enrichedReminders: Array<EnrichedVehicleServiceDto> =
+      await this.enrichData(enrichedNews);
+
+    this.logger.log('Saving news data...');
+    if (enrichedReminders && Array.isArray(enrichedReminders)) {
+      for (const enrichedNewsItem of enrichedReminders) {
         this.logger.log(enrichedNewsItem);
         if (enrichedNewsItem.isValid) {
-          await this.saveValidNewsItem(enrichedNewsItem);
+          const customer = await this.saveValidNewsItem(enrichedNewsItem);
+          if (customer != null) {
+            await this.saveReminder(customer.id, enrichedNewsItem.reminder);
+          }
         } else {
-          this.logger.log(enrichedNewsItem);
+          this.logger.log('Invalid news ', enrichedNewsItem);
         }
       }
     } else {
@@ -42,26 +57,47 @@ export class VehicleService {
     const response = await this.aIService.cleanData(JSON.stringify(services));
     const cleanedResponse = response.replace(/^```json\s*|```$/g, '');
 
-    return this.jsonArrayToDto(cleanedResponse)
+    return this.jsonArrayToEnrichedVehicleServiceDto(cleanedResponse);
+  }
+
+  private async enrichData(services: Array<EnrichedVehicleServiceDto>) {
+    const response = await this.aIService.enrichData(JSON.stringify(services));
+    const cleanedResponse = response.replace(/^```json\s*|```$/g, '');
+
+    return await this.jsonArrayToEnrichedVehicleServiceDto(cleanedResponse);
   }
 
   private async saveValidNewsItem(enrichedNewsItem: EnrichedVehicleServiceDto) {
-    const customer = await this.vehicleServiceRepository.findByName(
+    try {
+      const customer = await this.vehicleServiceRepository.findByName(
         enrichedNewsItem.name,
-    );
-    if (!customer) {
-      await this.vehicleServiceRepository.createAllEntities(enrichedNewsItem);
-    } else {
-      await this.createPhoneIfNotExist(customer, enrichedNewsItem);
-      await this.createVehicleAppointmentIfNotExist(customer, enrichedNewsItem);
+      );
+      if (!customer) {
+        return await this.vehicleServiceRepository.createAllEntities(
+          enrichedNewsItem,
+        );
+      } else {
+        await this.createPhoneIfNotExist(customer, enrichedNewsItem);
+        await this.createVehicleAppointmentIfNotExist(
+          customer,
+          enrichedNewsItem,
+        );
+      }
+      return customer;
+    } catch (error) {
+      this.logger.error(error.message);
+      return null;
     }
   }
 
-  private async createPhoneIfNotExist(customer, enrichedNewsItem: EnrichedVehicleServiceDto) {
+  private async createPhoneIfNotExist(
+    customer,
+    enrichedNewsItem: EnrichedVehicleServiceDto,
+  ) {
     const existingPhone = customer.phones.find((phone) => {
       return (
-          phone.countryCode === enrichedNewsItem.phone.countryCode &&
-          phone.number === enrichedNewsItem.phone.number
+        phone.countryCode === enrichedNewsItem.phone.countryCode &&
+        phone.number === enrichedNewsItem.phone.number
       );
     });
 
@@ -74,19 +110,21 @@ export class VehicleService {
     }
   }
 
-  private async createVehicleAppointmentIfNotExist(customer, enrichedNewsItem: EnrichedVehicleServiceDto) {
+  private async createVehicleAppointmentIfNotExist(
+    customer,
+    enrichedNewsItem: EnrichedVehicleServiceDto,
+  ) {
     const existingVehicle = customer.vehicles.find((vehicle) => {
       return vehicle.plate === enrichedNewsItem.plate;
     });
 
     if (!existingVehicle) {
-      const newVehicle =
-          await this.vehicleServiceRepository.createVehicle({
-            customerId: customer.id,
-            brand: enrichedNewsItem.vehicle.brand,
-            model: enrichedNewsItem.vehicle.model,
-            plate: enrichedNewsItem.plate,
-          });
+      const newVehicle = await this.vehicleServiceRepository.createVehicle({
+        customerId: customer.id,
+        brand: enrichedNewsItem.vehicle.brand,
+        model: enrichedNewsItem.vehicle.model,
+        plate: enrichedNewsItem.plate,
+      });
       await this.vehicleServiceRepository.createAppointment({
         vehicleId: newVehicle.id,
         type: enrichedNewsItem.service.enum,
@@ -97,16 +135,19 @@ export class VehicleService {
     }
   }
 
-  private async createAppointmentIfNotExist(existingVehicle, enrichedNewsItem: EnrichedVehicleServiceDto) {
+  private async createAppointmentIfNotExist(
+    existingVehicle,
+    enrichedNewsItem: EnrichedVehicleServiceDto,
+  ) {
     const existingAppointment = existingVehicle.appointments.find(
-        (appointment) => {
-          return (
-              appointment.type ===
-              ServiceTypeHelper.getEnumConstant(enrichedNewsItem.service.enum) &&
-              appointment.date.getTime() ===
-              new Date(enrichedNewsItem.date).getTime()
-          );
-        },
+      (appointment) => {
+        return (
+          appointment.type ===
+            ServiceTypeHelper.getEnumConstant(enrichedNewsItem.service.enum) &&
+          appointment.date.getTime() ===
+            new Date(enrichedNewsItem.date).getTime()
+        );
+      },
     );
 
     if (!existingAppointment) {
@@ -118,16 +159,17 @@ export class VehicleService {
     }
   }
 
-  private async jsonArrayToDto(
+  private async jsonArrayToEnrichedVehicleServiceDto(
     json: string,
   ): Promise<Array<EnrichedVehicleServiceDto>> {
     const plainObjects = JSON.parse(json);
     const plainArrays = Array.isArray(plainObjects)
       ? plainObjects
       : [plainObjects];
-    return plainToInstance(
-      EnrichedVehicleServiceDto,
-      plainArrays,
-    );
+    return plainToInstance(EnrichedVehicleServiceDto, plainArrays);
+  }
+
+  private async saveReminder(id: string, reminder: EnrichedReminderDto) {
+    await this.reminderRepository.create(id, reminder);
   }
 }

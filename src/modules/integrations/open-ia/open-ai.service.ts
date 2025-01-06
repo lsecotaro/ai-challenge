@@ -14,7 +14,8 @@ export class OpenAIService implements AiActions {
   private openaiModel: string;
   private openaiCertain: number;
   private systemPrompt: string;
-  private userPrompt: string;
+  private userCleaningPrompt: string;
+  private userEnrichingPrompt: string;
 
   constructor() {
     this.openai = new OpenAI({
@@ -23,11 +24,12 @@ export class OpenAIService implements AiActions {
     this.openaiModel = process.env.OPENAI_MODEL;
     this.openaiCertain = Number(process.env.OPENAI_CERTAIN);
     this.systemPrompt = process.env.PROMPT_SYSTEM_CLEAN_ENRICH;
-    this.userPrompt = process.env.PROMPT_USER_CLEAN;
+    this.userCleaningPrompt = process.env.PROMPT_USER_CLEAN;
+    this.userEnrichingPrompt = process.env.PROMPT_USER_ENRICH;
   }
 
   async cleanData(data: string): Promise<string> {
-    const messages = this.buildPrompts(data);
+    const messages = this.buildCleaningPrompts(data);
     const response = await this.openai.chat.completions.create({
       model: this.openaiModel,
       temperature: this.openaiCertain,
@@ -36,11 +38,17 @@ export class OpenAIService implements AiActions {
     return response.choices[0]?.message?.content || '';
   }
 
-  enrichData(input: string): Promise<string> {
-    return Promise.resolve('');
+  async enrichData(data: string): Promise<string> {
+    const messages = this.buildEnrichingPrompts(data);
+    const response = await this.openai.chat.completions.create({
+      model: this.openaiModel,
+      temperature: this.openaiCertain,
+      messages,
+    });
+    return response.choices[0]?.message?.content || '';
   }
 
-  private buildPrompts(data: string): Array<OpenAIMessageDto> {
+  private buildCleaningPrompts(data: string): Array<OpenAIMessageDto> {
     const servicesTypes = this.concatEnumValues(VehicleServiceType);
     const messages: Array<OpenAIMessageDto> = [
       {
@@ -49,13 +57,28 @@ export class OpenAIService implements AiActions {
       },
       {
         role: this.USER,
-        content: this.userPrompt
+        content: this.userCleaningPrompt
           .replace('{1}', data)
           .replace('{2}', servicesTypes),
       },
     ];
     return messages;
   }
+
+  private buildEnrichingPrompts(data: string): Array<OpenAIMessageDto> {
+    const messages: Array<OpenAIMessageDto> = [
+      {
+        role: this.SYSTEM,
+        content: this.systemPrompt,
+      },
+      {
+        role: this.USER,
+        content: this.userEnrichingPrompt.replace('{1}', data),
+      },
+    ];
+    return messages;
+  }
+
   private concatEnumValues(enumObject: any): string {
     return Object.values(enumObject).join(', ');
   }

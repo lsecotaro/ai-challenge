@@ -2,6 +2,7 @@ import { EnrichedPhoneDto } from './enriched-phone.dto';
 import { EnrichedVehicleDto } from './enriched-vehicle-dto';
 import { EnrichedServiceDto } from './enriched-service.dto';
 import { IsString, IsBoolean, ValidateNested } from 'class-validator';
+import { EnrichedReminderDto } from './enriched-reminder.dto';
 
 export class EnrichedVehicleServiceDto {
   @IsString()
@@ -30,4 +31,7 @@ export class EnrichedVehicleServiceDto {
 
   @IsBoolean()
   isValid: boolean;
+
+  @ValidateNested()
+  reminder: EnrichedReminderDto;
 }

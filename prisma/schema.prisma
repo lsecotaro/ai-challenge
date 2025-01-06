@@ -50,6 +50,7 @@ model Appointment {
 model Reminder {
   id String @id @default(uuid())
   message String
+  dueDate DateTime
   customer Customer @relation(fields: [customerId], references: [id])
   customerId String
 }
@@ -68,7 +69,7 @@ model FailureNews {
   id String @id @default(uuid())
   receivedEntity  String
   reason String
-  fixed Boolean
+  fixed Boolean @default(false)
   news News @relation(fields: [newsId], references: [id])
   newsId String
 }
