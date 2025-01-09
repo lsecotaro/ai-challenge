@@ -2,17 +2,19 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AiActions } from '../interfaces/ai.actions';
 import { VehicleServiceRequestDto } from './dto/vehicle-service-request.dto';
 import { EnrichedVehicleServiceDto } from './dto/enriched/enriched-vehicle-service.dto';
-import { plainToInstance } from 'class-transformer';
 import { VehicleServiceRepository } from '../interfaces/vehicle-service.repository';
 import { ServiceTypeHelper } from '../commons/service-type.helper';
 import { EnrichedReminderDto } from './dto/enriched/enriched-reminder.dto';
 import { ReminderRepository } from '../interfaces/reminder.repository';
 import * as process from 'process';
+import { ApiIntegrationService } from '../commons/api-integration.service';
+import { QueueService } from './queue.service';
+import { VehicleServiceMapper } from './vehicle-service.mapper';
 
 @Injectable()
 export class VehicleService {
   private readonly logger: Logger = new Logger(VehicleService.name);
-  private readonly batchSize;
+  private readonly batchSize: number;
 
   constructor(
     @Inject('AiActions') private readonly aIService: AiActions,
@@ -20,69 +22,100 @@ export class VehicleService {
     private readonly vehicleServiceRepository: VehicleServiceRepository,
     @Inject('ReminderRepository')
     private readonly reminderRepository: ReminderRepository,
+    private readonly queueService: QueueService,
+    private readonly apiIntegrationService: ApiIntegrationService,
+    private readonly vehicleServiceMapper: VehicleServiceMapper,
   ) {
-    this.batchSize = process.env.BATCH_SIZE;
+    this.batchSize = Number(process.env.BATCH_SIZE);
   }
 
-  async processUploadCsv(content: any[], filename: string ) {
-    this.logger.log('Processing CSV {}...', filename);
-    const news = this.mapToVehicleServiceRequestDto(content);
+  async processUploadCsv(content: any[], filename: string) {
+    this.logger.log('Processing CSV ' + filename);
+    const news =
+      this.vehicleServiceMapper.mapToVehicleServiceRequestDto(content);
 
-    let batchNumber = 1;
-    for (let i = 0; i < news.length; i += this.batchSize) {
-      this.logger.log('Processing batch ' + batchNumber);
-      const batch = news.slice(i, i + this.batchSize);
-      await this.processNews(batch);
-      batchNumber++;
+    const totalBatches = Math.ceil(news.length / this.batchSize);
+
+    for (let batchNumber = 0; batchNumber < totalBatches; batchNumber++) {
+      const start = batchNumber * this.batchSize;
+      const batch = news.slice(start, start + this.batchSize);
+      await this.queueService.publish(batch, batchNumber + 1);
     }
 
-    this.logger.log('CSV Processing completed for {}.', filename);
+    this.logger.log('CSV Processing completed for ' + filename);
   }
 
   async processNews(
     services: Array<VehicleServiceRequestDto>,
+    batchNumber: number,
   ): Promise<Array<EnrichedVehicleServiceDto> | void> {
-    this.logger.log('Processing news...');
+    this.logger.log(`Processing news #${batchNumber}...`);
 
-    this.logger.log('Cleaning news data...');
-    const enrichedNews: Array<EnrichedVehicleServiceDto> =
-      await this.cleanData(services);
+    try {
+      this.logger.log(`Cleaning news data #${batchNumber}...`);
+      const enrichedNews: Array<EnrichedVehicleServiceDto> =
+        await this.cleanData(services);
 
-    this.logger.log('Enriching news data...');
-    const enrichedReminders: Array<EnrichedVehicleServiceDto> =
-      await this.enrichData(enrichedNews);
+      this.logger.log(`Enriching news data #${batchNumber}...`);
+      const enrichedReminders: Array<EnrichedVehicleServiceDto> =
+        await this.enrichData(enrichedNews);
 
-    this.logger.log('Saving news data...');
-    if (enrichedReminders && Array.isArray(enrichedReminders)) {
-      for (const enrichedNewsItem of enrichedReminders) {
-        if (enrichedNewsItem.isValid) {
-          const customer = await this.saveValidNewsItem(enrichedNewsItem);
-          if (customer != null) {
-            await this.saveReminder(customer.id, enrichedNewsItem.reminder);
-          }
-        } else {
-          this.logger.log('Invalid news: ' + JSON.stringify(enrichedNewsItem));
+      this.logger.log(`Saving news data #${batchNumber}...`);
+      if (enrichedReminders && Array.isArray(enrichedReminders)) {
+        for (const enrichedNewsItem of enrichedReminders) {
+          await this.processSingleNewsItem(enrichedNewsItem);
         }
+      } else {
+        this.logger.error('Error: Unable to transform news data');
       }
-    } else {
-      this.logger.error('Error: Unable to transform news data');
+      this.logger.log(`Processing news finished #${batchNumber}`);
+    } catch (error) {
+      this.logger.error('An error occurred during the news processing.', error);
     }
+  }
 
-    this.logger.log('Processing news finished');
+  private async processSingleNewsItem(
+    enrichedNewsItem: EnrichedVehicleServiceDto,
+  ) {
+    try {
+      const customer = await this.saveValidNewsItem(enrichedNewsItem);
+
+      if (customer != null) {
+        await this.saveReminder(customer.id, enrichedNewsItem.reminder);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error processing news item: ${JSON.stringify(enrichedNewsItem)}`,
+        error,
+      );
+    }
   }
 
   private async cleanData(services: Array<VehicleServiceRequestDto>) {
-    const response = await this.aIService.cleanData(JSON.stringify(services));
+    const response = await this.apiIntegrationService.retryableApiCall(() =>
+      this.aIService.cleanData(JSON.stringify(services)),
+    );
     const cleanedResponse = response.replace(/^```json\s*|```$/g, '');
-
-    return this.jsonArrayToEnrichedVehicleServiceDto(cleanedResponse);
+    const cleanedNews =
+      await this.vehicleServiceMapper.jsonArrayToEnrichedVehicleServiceDto(
+        cleanedResponse,
+      );
+    const validNews = cleanedNews.filter(
+      (enrichedNewsItem) => enrichedNewsItem.isValid,
+    );
+    this.logger.log('Invalid news  ' + (cleanedNews.length - validNews.length));
+    return validNews;
   }
 
   private async enrichData(services: Array<EnrichedVehicleServiceDto>) {
-    const response = await this.aIService.enrichData(JSON.stringify(services));
+    const response = await this.apiIntegrationService.retryableApiCall(() =>
+      this.aIService.enrichData(JSON.stringify(services)),
+    );
     const cleanedResponse = response.replace(/^```json\s*|```$/g, '');
 
-    return await this.jsonArrayToEnrichedVehicleServiceDto(cleanedResponse);
+    return await this.vehicleServiceMapper.jsonArrayToEnrichedVehicleServiceDto(
+      cleanedResponse,
+    );
   }
 
   private async saveValidNewsItem(enrichedNewsItem: EnrichedVehicleServiceDto) {
@@ -179,28 +212,5 @@ export class VehicleService {
 
   private async saveReminder(id: string, reminder: EnrichedReminderDto) {
     await this.reminderRepository.create(id, reminder);
-  }
-
-  private async jsonArrayToEnrichedVehicleServiceDto(
-    json: string,
-  ): Promise<Array<EnrichedVehicleServiceDto>> {
-    const plainObjects = JSON.parse(json);
-    const plainArrays = Array.isArray(plainObjects)
-      ? plainObjects
-      : [plainObjects];
-    return plainToInstance(EnrichedVehicleServiceDto, plainArrays);
-  }
-
-  mapToVehicleServiceRequestDto(input: any[]): VehicleServiceRequestDto[] {
-    this.logger.log('Mapping to VehicleServiceRequestDto');
-
-    return input.map((item) => ({
-      name: item.Nombre,
-      phone: item.Telefono,
-      vehicle: item.Vehiculo,
-      plate: item.Patente,
-      service: item['Servicio '].trim(),
-      date: item.Fecha,
-    }));
   }
 }
