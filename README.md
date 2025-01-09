@@ -1,6 +1,14 @@
 ## Description
 
-Using AI to clean and enrich data
+Using AI to clean and enrich data.
+
+To run the project:
+* Configure .env, you can make a copy of .env.example and set openAi Key
+* Follow the below instruction from:
+  * Project setup
+  * DB Setup
+  * RabbitMQ Setup
+  * Compile and run the project
 
 ## Environment variables
 
@@ -18,6 +26,15 @@ $ docker-compose up --build
 $ npx prisma migrate dev --name "init"
 ```
 
+## RabbitMQ Setup
+Access RabbitMQ Management UI: Open your browser and go to http://localhost:15672. Log in with the credentials defined in RABBITMQ_DEFAULT_USER and RABBITMQ_DEFAULT_PASS.
+Creating a queue:
+After docker-compose is up run this
+
+```bash
+$ chmod +x rabbitmq-init.sh
+$ ./rabbitmq-init.sh
+```
 ## Compile and run the project
 
 ```bash
