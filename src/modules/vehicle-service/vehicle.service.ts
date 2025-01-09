@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { AiActions } from '../interfaces/ai.actions';
+import { AiActions } from '../interfaces/ai-actions';
 import { VehicleServiceRequestDto } from './dto/vehicle-service-request.dto';
 import { EnrichedVehicleServiceDto } from './dto/enriched/enriched-vehicle-service.dto';
 import { VehicleServiceRepository } from '../interfaces/vehicle-service.repository';

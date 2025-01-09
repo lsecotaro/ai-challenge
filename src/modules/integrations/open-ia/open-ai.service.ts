@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { OpenAI } from 'openai';
 import { OpenAIMessageDto } from './dto/OpenAIMessageDto';
-import { AiActions } from '../../interfaces/ai.actions';
+import { AiActions } from '../../interfaces/ai-actions';
 import * as process from 'process';
 import { VehicleServiceType } from '../../commons/model/service-type.enum';
 

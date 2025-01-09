@@ -23,7 +23,7 @@ export class VehicleServiceController {
     private readonly csvParserService: CsvParserService,
   ) {}
 
-  @Post('clean')
+  @Post('test')
   async cleanNews(
     @Body() request: Array<VehicleServiceRequestDto>,
   ): Promise<Array<EnrichedVehicleServiceDto> | void> {
